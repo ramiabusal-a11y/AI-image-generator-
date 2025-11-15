@@ -10,17 +10,30 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing API Key." });
   }
 
+  const AIML_URL = "https://api.aimlapi.com/v1/images/generations/";
+
   // تنظيف base64
   function cleanBase64(str) {
     if (!str) return null;
 
     return String(str)
-      .replace(/(\r\n|\n|\r)/gm, "")
-      .replace(/ /g, "")
-      .replace(/^data:image\/[^;]+;base64,/, match => match); // الحفاظ على النوع
+      .replace(/(\r\n|\n|\r)/gm, "") // إزالة الأسطر الجديدة
+      .replace(/ /g, "");            // إزالة المسافات
+    // نترك prefix كما هو (data:image/png;base64,...) حسب ما قاله فريق AIMLAPI
   }
 
-  const AIML_URL = "https://api.aimlapi.com/v1/images/generations/";
+  // تحميل صورة من URL وتحويلها إلى data:image/...;base64,...
+  async function fetchImageAsDataUrl(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error("Failed to download image from URL.");
+    }
+
+    const contentType = resp.headers.get("content-type") || "image/png";
+    const arrayBuffer = await resp.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    return `data:${contentType};base64,${base64}`;
+  }
 
   // --- اختبار الاتصال ---
   if (operation === "test") {
@@ -37,9 +50,10 @@ export default async function handler(req, res) {
         }),
       });
 
+      const data = await test.json().catch(() => ({}));
+
       if (!test.ok) {
-        const err = await test.json();
-        throw new Error(err.error?.message || "Invalid API Key");
+        throw new Error(data.error?.message || "Invalid API Key");
       }
 
       return res.status(200).json({
@@ -52,17 +66,17 @@ export default async function handler(req, res) {
   }
 
   // --- تجهيز payload حسب العملية ---
-  let finalPayload = {};
+  let finalPayload;
 
-  // 1. Text to Image
+  // 1) Text to Image
   if (operation === "text-to-image") {
     finalPayload = {
       model: payload.model,
-      prompt: payload.prompt,
+      prompt: payload.prompt
     };
   }
 
-  // 2. Remove Background
+  // 2) Remove Background (نرسل base64 مباشرة من المتصفح)
   if (operation === "remove-bg") {
     finalPayload = {
       model: payload.model,
@@ -71,13 +85,21 @@ export default async function handler(req, res) {
     };
   }
 
-  // 3. Edit Image (تصميم المنتج)
+  // 3) Edit Image / تصميم المنتج
   if (operation === "edit-image") {
+    let img = payload.image;
+
+    // إذا كانت الصورة URL (ناتجة من خطوة إزالة الخلفية)
+    // نحولها إلى base64 قبل إرسالها لـ AIMLAPI
+    if (img && img.startsWith("http")) {
+      img = await fetchImageAsDataUrl(img);
+    }
+
     finalPayload = {
       model: payload.model,
-      prompt: payload.prompt,
-      image: cleanBase64(payload.image),
-      mask: null  // 🔥 أهم نقطة — الحل النهائي للمشكلة
+      prompt: payload.prompt,      // الوصف الجديد
+      image: cleanBase64(img)      // الآن دائماً base64
+      // لا نضيف mask لأن وثائق AIMLAPI التي عندك لا تطلبه
     };
   }
 
@@ -92,20 +114,21 @@ export default async function handler(req, res) {
       body: JSON.stringify(finalPayload),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       console.error("AIML Error:", data);
+      // نُعيد رسالة الخطأ كاملة عشان لو استمر المشكلة تشوف السبب الحقيقي
       return res.status(500).json({
-        error: data.error?.message || "AIML API request failed"
+        error: data.error?.message || JSON.stringify(data) || "AIML API request failed"
       });
     }
 
-    // استخراج رابط الصورة
+    // استخراج رابط الصورة من الرد
     const url =
-      data.data?.[0]?.url ||
-      data.image_url ||
-      data.image ||
+      data?.data?.[0]?.url ||
+      data?.image_url ||
+      data?.image ||
       null;
 
     if (!url) {
@@ -114,7 +137,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // إرسال النتيجة للواجهة حسب العملية
+    // نرجّع النتيجة حسب العملية
     if (operation === "text-to-image") {
       return res.status(200).json({ imageUrl: url });
     }
