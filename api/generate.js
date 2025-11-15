@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // السماح فقط بطلبات POST
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
@@ -11,19 +10,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing API Key." });
   }
 
-  // تنظيف الـ Base64 ومنع الأخطاء
+  // تنظيف base64
   function cleanBase64(str) {
     if (!str) return null;
 
     return String(str)
-      .replace(/(\r\n|\n|\r)/gm, "")   // حذف الأسطر الجديدة
-      .replace(/ /g, "")               // حذف الفراغات
-      .replace(/^data:image\/[^;]+;base64,/, "data:image/png;base64,"); // توحيد الصيغة
+      .replace(/(\r\n|\n|\r)/gm, "")
+      .replace(/ /g, "")
+      .replace(/^data:image\/[^;]+;base64,/, match => match); // الحفاظ على النوع
   }
 
   const AIML_URL = "https://api.aimlapi.com/v1/images/generations/";
 
-  // 🔹 اختبار الاتصال
+  // --- اختبار الاتصال ---
   if (operation === "test") {
     try {
       const test = await fetch(AIML_URL, {
@@ -52,16 +51,18 @@ export default async function handler(req, res) {
     }
   }
 
-  // 🔹 تجهيز Payload النهائي بناءً على العملية
+  // --- تجهيز payload حسب العملية ---
   let finalPayload = {};
 
+  // 1. Text to Image
   if (operation === "text-to-image") {
     finalPayload = {
       model: payload.model,
-      prompt: payload.prompt
+      prompt: payload.prompt,
     };
   }
 
+  // 2. Remove Background
   if (operation === "remove-bg") {
     finalPayload = {
       model: payload.model,
@@ -70,15 +71,17 @@ export default async function handler(req, res) {
     };
   }
 
+  // 3. Edit Image (تصميم المنتج)
   if (operation === "edit-image") {
     finalPayload = {
       model: payload.model,
       prompt: payload.prompt,
-      image: cleanBase64(payload.image)
+      image: cleanBase64(payload.image),
+      mask: null  // 🔥 أهم نقطة — الحل النهائي للمشكلة
     };
   }
 
-  // 🔹 إرسال الطلب إلى AIMLAPI
+  // --- إرسال الطلب لـ AIMLAPI ---
   try {
     const response = await fetch(AIML_URL, {
       method: "POST",
@@ -106,9 +109,12 @@ export default async function handler(req, res) {
       null;
 
     if (!url) {
-      return res.status(500).json({ error: "Image URL not found in response." });
+      return res.status(500).json({
+        error: "Image URL not found in AIML API response."
+      });
     }
 
+    // إرسال النتيجة للواجهة حسب العملية
     if (operation === "text-to-image") {
       return res.status(200).json({ imageUrl: url });
     }
