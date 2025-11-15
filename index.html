@@ -138,8 +138,8 @@
             const [settings, setSettings] = useState({
                 apiKey: '',
                 textToImageModel: 'flux/schnell',
-                bgRemoveModel: 'google/gemini-2.5-flash-image-edit',
-                designModel: 'alibaba/qwen-image-edit'
+                bgRemoveModel: 'alibaba/qwen-image-edit',
+                designModel: 'google/gemini-2.5-flash-image-edit'
             });
 
             useEffect(() => {
@@ -174,14 +174,9 @@
         const useSettings = () => useContext(SettingsContext);
 
         // --- (API) REAL API Service ---
-        // يتصل هذا بالخلفية (Vercel Serverless Function)
-        // الخلفية هي التي تتصل بـ AIMLAPI.COM
-        // !! هذا لن يعمل في المعاينة، سيعمل فقط عند النشر على Vercel !!
         const apiService = {
-            
             _callBackend: async (apiKey, operation, payload) => {
                 try {
-                    // هذا المسار (/api/generate) سيعمل فقط على Vercel
                     const response = await fetch('/api/generate', {
                         method: 'POST',
                         headers: {
@@ -204,50 +199,29 @@
 
                 } catch (err) {
                     console.error(`Backend call failed for [${operation}]:`, err);
-                    // رسالة خطأ للمعاينة
                     if (window.location.hostname === "localhost" || !window.location.hostname) {
                          throw new Error(`فشل الاتصال بالخلفية (هذا متوقع في المعاينة). التطبيق سيعمل عند النشر.`);
                     }
                     throw new Error(err.message || 'فشل الاتصال بالخادم الخلفي.');
                 }
             },
-
             testConnection: async (apiKey) => {
                 return apiService._callBackend(apiKey, 'test', {});
             },
-            
             generateTextToImage: async (prompt, model, apiKey) => {
-                const payload = {
-                    model: model,
-                    prompt: prompt
-                };
+                const payload = { model, prompt };
                 return apiService._callBackend(apiKey, 'text-to-image', payload);
             },
-            
             removeBackground: async (imageBase64, model, apiKey) => {
-                const payload = {
-                    model: model,
-                    prompt: "remove background", 
-                    image: imageBase64 
-                };
+                const payload = { model, prompt: "remove background", image: imageBase64 };
                 return apiService._callBackend(apiKey, 'remove-bg', payload);
             },
-            
             generateImageFromProduct: async (productImageBase64, prompt, model, apiKey) => {
-                const payload = {
-                    model: model,
-                    prompt: prompt, 
-                    image: productImageBase64 
-                };
+                const payload = { model, prompt, image: productImageBase64 };
                 return apiService._callBackend(apiKey, 'edit-image', payload);
             },
-            
             generateAIDesign: async (productImageBase64, model, apiKey) => {
-                const payload = {
-                    model: model,
-                    prompt: "Analyze the product and place it in a suitable professional environment", 
-                    image: productImageBase64
-                };
+                const payload = { model, prompt: "Analyze the product and place it in a suitable professional environment", image: productImageBase64 };
                 return apiService._callBackend(apiKey, 'edit-image', payload);
             }
         };
@@ -331,14 +305,8 @@
             };
 
             const handleSave = () => {
-                if (testStatus === 'success' || testStatus === 'idle') { 
-                    saveSettings(localSettings);
-                    onClose();
-                } else {
-                    // سنسمح بالحفظ حتى لو فشل الاختبار، لأن الفشل قد يكون بسبب المعاينة
-                    saveSettings(localSettings);
-                    onClose();
-                }
+                saveSettings(localSettings);
+                onClose();
             };
             
             const handleExport = () => {
@@ -436,7 +404,7 @@
                                     onChange={handleChange}
                                     className="input-field"
                                 />
-                                <p className="text-xs text-gray-400 mt-1">المقترح: `google/gemini-2.5-flash-image-edit`</p>
+                                <p className="text-xs text-gray-400 mt-1">المقترح: `alibaba/qwen-image-edit`</p>
                             </div>
 
                             <div>
@@ -449,7 +417,7 @@
                                     onChange={handleChange}
                                     className="input-field"
                                 />
-                                <p className="text-xs text-gray-400 mt-1">المقترح: `alibaba/qwen-image-edit`</p>
+                                <p className="text-xs text-gray-400 mt-1">المقترح: `google/gemini-2.5-flash-image-edit`</p>
                             </div>
                             
                             <div className="flex flex-col sm:flex-row gap-4">
@@ -731,7 +699,7 @@
                     </div>
                     
                     {error && (
-                        <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300">
+                        <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300 break-words">
                             {error}
                         </div>
                     )}
@@ -842,7 +810,7 @@
                     <p className="text-gray-300">ارفع صورة منتج أو التقطها، وسيقوم النظام بإزالة الخلفية، ثم يمكنك وضع المنتج في تصميم جديد كلياً.</p>
 
                     {error && (
-                        <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300">
+                        <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300 break-words">
                             {error}
                         </div>
                     )}
