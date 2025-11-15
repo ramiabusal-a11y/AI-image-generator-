@@ -1,0 +1,9 @@
+{
+  "name": "ai-image-gen-vercel-backend",
+  "version": "1.0.0",
+  "description": "Backend proxy for AIMLAPI.COM on Vercel",
+  "author": "Gemini",
+  "engines": {
+    "node": "18.x"
+  }
+}
