@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مولد الصور بالذكاء الاصطناعي</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React 18 -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- Babel (for in-browser JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Custom Tailwind Config & Base Styles -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .glass-card {
+                @apply bg-white/20 backdrop-blur-lg rounded-2xl shadow-lg border border-white/30;
+            }
+            .glass-modal {
+                @apply bg-gray-900/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20;
+            }
+            .btn-primary {
+                @apply bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-all duration-200 px-5 py-2.5;
+            }
+            .btn-secondary {
+                @apply bg-white/30 text-white font-semibold rounded-lg shadow-md hover:bg-white/40 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-opacity-75 transition-all duration-200 px-5 py-2.5;
+            }
+            .btn-danger {
+                @apply bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition-all duration-200 px-5 py-2.5;
+            }
+            .input-field {
+                @apply w-full px-4 py-2.5 bg-white/10 text-white rounded-lg border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-300;
+            }
+        }
+    </style>
+    
+    <!-- Print CSS -->
+    <style type="text/css" media="print">
+        body {
+            background: #fff;
+            color: #000;
+        }
+        .noprint {
+            display: none !important;
+        }
+        .print-only {
+            display: block !important;
+        }
+        #printable-image-container {
+            width: 100%;
+            page-break-inside: avoid;
+        }
+        #printable-image {
+            max-width: 100%;
+            max-height: 90vh;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 bg-gradient-to-br from-gray-900 via-gray-800 to-blue-900 min-h-screen text-white font-sans overflow-x-hidden">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, createContext, useContext } = React;
+
+        // --- (Icons) Tailwind UI Heroicons (Inline SVG) ---
+        
+        const CogIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m1.5 0H21m-1.5 0H18m2.121 5.5-1.414-1.414M5.636 5.636 4.222 4.222m15.556 1.414-1.414 1.414M4.222 19.778l1.414-1.414M12 21v-1.5m0-15V3m-5.636 3.136 1.414 1.414M18.364 18.364l-1.414-1.414" />
+            </svg>
+        );
+
+        const XMarkIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        );
+
+        const ArrowDownTrayIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 mr-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+        );
+
+        const ArrowUpOnSquareIcon = () => (
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 mr-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+        );
+
+        const ArrowUturnDownIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 mr-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-6 6m0 0l-6-6m6 6V9a6 6 0 0112 0v3" />
+            </svg>
+        );
+
+        const CameraIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.174C2.999 7.58 2.25 8.507 2.25 9.574v5.852c0 1.067.75 1.994 1.802 2.169a47.865 47.865 0 001.134.174 2.31 2.31 0 011.64 1.055l.822 1.598m8.22-1.598l.822-1.598a2.31 2.31 0 011.64-1.055 47.865 47.865 0 001.134-.174c1.052-.175 1.802-1.102 1.802-2.169V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.174 2.31 2.31 0 01-1.64-1.055l-.822-1.598m-8.22 1.598c-.414-1.603.465-3.113 2.05-3.113h3.9c1.585 0 2.464 1.51 2.05 3.113l-.822 1.598m-8.22-1.598l-.414-1.603c-.414-1.603.465-3.113 2.05-3.113h3.9c1.585 0 2.464 1.51 2.05 3.113l-.414 1.603" />
+            </svg>
+        );
+
+        const ArrowUpOnSquareStackIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+        );
+        
+        const ExclamationTriangleIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-3 text-yellow-300">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+        );
+
+
+        // --- (Context) Settings Context ---
+        const SettingsContext = createContext();
+
+        const SettingsProvider = ({ children }) => {
+            const [settings, setSettings] = useState({
+                apiKey: '',
+                textToImageModel: 'flux/schnell',
+                bgRemoveModel: 'google/gemini-2.5-flash-image-edit',
+                designModel: 'alibaba/qwen-image-edit'
+            });
+
+            useEffect(() => {
+                try {
+                    const storedSettings = localStorage.getItem('aiImageGenSettings');
+                    if (storedSettings) {
+                        setSettings(JSON.parse(storedSettings));
+                    }
+                } catch (error) {
+                    console.error("فشل تحميل الإعدادات:", error);
+                }
+            }, []);
+
+            const saveSettings = (newSettings) => {
+                try {
+                    setSettings(newSettings);
+                    localStorage.setItem('aiImageGenSettings', JSON.stringify(newSettings));
+                    return true;
+                } catch (error) {
+                    console.error("فشل حفظ الإعدادات:", error);
+                    return false;
+                }
+            };
+
+            return (
+                <SettingsContext.Provider value={{ settings, saveSettings }}>
+                    {children}
+                </SettingsContext.Provider>
+            );
+        };
+
+        const useSettings = () => useContext(SettingsContext);
+
+        // --- (API) REAL API Service ---
+        // يتصل هذا بالخلفية (Vercel Serverless Function)
+        // الخلفية هي التي تتصل بـ AIMLAPI.COM
+        // !! هذا لن يعمل في المعاينة، سيعمل فقط عند النشر على Vercel !!
+        const apiService = {
+            
+            _callBackend: async (apiKey, operation, payload) => {
+                try {
+                    // هذا المسار (/api/generate) سيعمل فقط على Vercel
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            apiKey,
+                            operation,
+                            payload
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || `Error: ${response.status}`);
+                    }
+                    
+                    return result;
+
+                } catch (err) {
+                    console.error(`Backend call failed for [${operation}]:`, err);
+                    // رسالة خطأ للمعاينة
+                    if (window.location.hostname === "localhost" || !window.location.hostname) {
+                         throw new Error(`فشل الاتصال بالخلفية (هذا متوقع في المعاينة). التطبيق سيعمل عند النشر.`);
+                    }
+                    throw new Error(err.message || 'فشل الاتصال بالخادم الخلفي.');
+                }
+            },
+
+            testConnection: async (apiKey) => {
+                return apiService._callBackend(apiKey, 'test', {});
+            },
+            
+            generateTextToImage: async (prompt, model, apiKey) => {
+                const payload = {
+                    model: model,
+                    prompt: prompt
+                };
+                return apiService._callBackend(apiKey, 'text-to-image', payload);
+            },
+            
+            removeBackground: async (imageBase64, model, apiKey) => {
+                const payload = {
+                    model: model,
+                    prompt: "remove background", 
+                    image: imageBase64 
+                };
+                return apiService._callBackend(apiKey, 'remove-bg', payload);
+            },
+            
+            generateImageFromProduct: async (productImageBase64, prompt, model, apiKey) => {
+                const payload = {
+                    model: model,
+                    prompt: prompt, 
+                    image: productImageBase64 
+                };
+                return apiService._callBackend(apiKey, 'edit-image', payload);
+            },
+            
+            generateAIDesign: async (productImageBase64, model, apiKey) => {
+                const payload = {
+                    model: model,
+                    prompt: "Analyze the product and place it in a suitable professional environment", 
+                    image: productImageBase64
+                };
+                return apiService._callBackend(apiKey, 'edit-image', payload);
+            }
+        };
+
+        // --- (Hooks) ---
+        
+        function useIncognitoWarning() {
+            const [isIncognito, setIsIncognito] = useState(false);
+            useEffect(() => {
+                const checkIncognito = async () => {
+                    try {
+                        const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+                        if (!fs) {
+                             if(navigator.storage && navigator.storage.estimate) {
+                                const { quota } = await navigator.storage.estimate();
+                                if (quota < 120000000) {
+                                    setIsIncognito(true);
+                                }
+                             }
+                             return;
+                        }
+                        fs(window.TEMPORARY, 100,
+                            (fs) => setIsIncognito(false),
+                            (e) => setIsIncognito(true)
+                        );
+                    } catch (e) {
+                        setIsIncognito(true);
+                    }
+                };
+                checkIncognito();
+            }, []);
+            return isIncognito;
+        }
+
+        // --- (Components) ---
+        
+        function IncognitoWarning({ isIncognito }) {
+            if (!isIncognito) return null;
+            return (
+                <div className="noprint bg-yellow-500/80 text-black p-3 text-center font-semibold flex items-center justify-center">
+                    <ExclamationTriangleIcon />
+                    ⚠️ التخزين محلي على جهازك. أنت في وضع التصفح المتخفي أو في بيئة غير مستقرة. ننصح بعمل نسخة احتياطية (JSON) لإعداداتك دورياً.
+                </div>
+            );
+        }
+
+        function Spinner({ size = 'sm' }) {
+            const sizeClasses = size === 'lg' ? 'w-16 h-16 border-8' : 'w-6 h-6 border-4';
+            return (
+                <div className={`animate-spin rounded-full ${sizeClasses} border-blue-400 border-t-transparent`}></div>
+            );
+        }
+
+        function SettingsModal({ isOpen, onClose }) {
+            const { settings, saveSettings } = useSettings();
+            const [localSettings, setLocalSettings] = useState(settings);
+            const [testStatus, setTestStatus] = useState('idle'); 
+            const [testMessage, setTestMessage] = useState('');
+            const importFileRef = useRef(null);
+            
+            useEffect(() => {
+                setLocalSettings(settings);
+            }, [settings, isOpen]);
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setLocalSettings(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleTestConnection = async () => {
+                setTestStatus('loading');
+                setTestMessage('');
+                try {
+                    const result = await apiService.testConnection(localSettings.apiKey);
+                    setTestStatus('success');
+                    setTestMessage(result.message || 'تم الاتصال بنجاح');
+                } catch (error) {
+                    setTestStatus('error');
+                    setTestMessage(error.message || 'فشل الاتصال، يرجى مراجعة المفتاح');
+                }
+            };
+
+            const handleSave = () => {
+                if (testStatus === 'success' || testStatus === 'idle') { 
+                    saveSettings(localSettings);
+                    onClose();
+                } else {
+                    // سنسمح بالحفظ حتى لو فشل الاختبار، لأن الفشل قد يكون بسبب المعاينة
+                    saveSettings(localSettings);
+                    onClose();
+                }
+            };
+            
+            const handleExport = () => {
+                try {
+                    const dataStr = JSON.stringify(settings, null, 2);
+                    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'ai-settings-backup.json';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    console.error("فشل تصدير الإعدادات:", error);
+                    alert("فشل تصدير الإعدادات.");
+                }
+            };
+            
+            const handleImportClick = () => {
+                importFileRef.current.click();
+            };
+            
+            const handleImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedSettings = JSON.parse(event.target.result);
+                        if (importedSettings.apiKey !== undefined) {
+                            setLocalSettings(importedSettings);
+                            setTestStatus('idle'); 
+                            setTestMessage('تم استيراد الإعدادات. يرجى اختبار الاتصال قبل الحفظ.');
+                        } else {
+                            throw new Error('ملف غير صالح');
+                        }
+                    } catch (error) {
+                        console.error("فشل استيراد الإعدادات:", error);
+                        alert('فشل قراءة الملف. تأكد أنه ملف JSON صالح.');
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = null; 
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="noprint fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="glass-modal text-white w-full max-w-2xl p-6 md:p-8 m-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">إعدادات الاتصال</h2>
+                            <button onClick={onClose} className="text-gray-300 hover:text-white">
+                                <XMarkIcon />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-6">
+                            <div>
+                                <label htmlFor="apiKey" className="block text-sm font-medium mb-2">مفتاح API (من AIMLAPI.COM)</label>
+                                <input
+                                    type="password"
+                                    id="apiKey"
+                                    name="apiKey"
+                                    value={localSettings.apiKey}
+                                    onChange={handleChange}
+                                    className="input-field"
+                                    placeholder="أدخل مفتاح API الخاص بك هنا"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label htmlFor="textToImageModel" className="block text-sm font-medium mb-2">مودل تحويل النص إلى صورة</label>
+                                <input
+                                    type="text"
+                                    id="textToImageModel"
+                                    name="textToImageModel"
+                                    value={localSettings.textToImageModel}
+                                    onChange={handleChange}
+                                    className="input-field"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">المقترح: `flux/schnell`</p>
+                            </div>
+                            
+                            <div>
+                                <label htmlFor="bgRemoveModel" className="block text-sm font-medium mb-2">مودل إزالة الخلفية</label>
+                                <input
+                                    type="text"
+                                    id="bgRemoveModel"
+                                    name="bgRemoveModel"
+                                    value={localSettings.bgRemoveModel}
+                                    onChange={handleChange}
+                                    className="input-field"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">المقترح: `google/gemini-2.5-flash-image-edit`</p>
+                            </div>
+
+                            <div>
+                                <label htmlFor="designModel" className="block text-sm font-medium mb-2">مودل تصميم المنتج (AI)</label>
+                                <input
+                                    type="text"
+                                    id="designModel"
+                                    name="designModel"
+                                    value={localSettings.designModel}
+                                    onChange={handleChange}
+                                    className="input-field"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">المقترح: `alibaba/qwen-image-edit`</p>
+                            </div>
+                            
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <button
+                                    onClick={handleTestConnection}
+                                    className="btn-secondary flex-1 flex items-center justify-center"
+                                    disabled={testStatus === 'loading'}
+                                >
+                                    {testStatus === 'loading' ? <Spinner /> : 'اختبار الاتصال'}
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    className="btn-primary flex-1"
+                                >
+                                    حفظ الإعدادات
+                                </button>
+                            </div>
+                            
+                            {testMessage && (
+                                <div className={`p-3 rounded-lg text-center font-medium ${
+                                    testStatus === 'success' ? 'bg-green-500/20 text-green-300' :
+                                    testStatus === 'error' ? 'bg-red-500/20 text-red-300' :
+                                    'bg-blue-500/20 text-blue-300'
+                                }`}>
+                                    {testMessage}
+                                 </div>
+                            )}
+
+                            <hr className="border-white/20" />
+                            
+                            <h3 className="text-lg font-semibold">النسخ الاحتياطي للإعدادات</h3>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <button onClick={handleExport} className="btn-secondary flex-1 flex items-center justify-center">
+                                    <ArrowDownTrayIcon /> تصدير (JSON)
+                                </button>
+                                <button onClick={handleImportClick} className="btn-secondary flex-1 flex items-center justify-center">
+                                    <ArrowUpOnSquareIcon /> استيراد (JSON)
+                                </button>
+                                <input type="file" ref={importFileRef} onChange={handleImport} accept=".json" className="hidden" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ImageUploader({ onImageReady, onLoadingChange }) {
+            const [cameraActive, setCameraActive] = useState(false);
+            const [facingMode, setFacingMode] = useState('environment'); 
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const streamRef = useRef(null);
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    onLoadingChange(true);
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        onImageReady(event.target.result);
+                        onLoadingChange(false);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const startCamera = async (mode) => {
+                try {
+                    if (streamRef.current) {
+                        streamRef.current.getTracks().forEach(track => track.stop());
+                    }
+                    onLoadingChange(true);
+                    setCameraActive(true);
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            facingMode: mode,
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        } 
+                    });
+                    streamRef.current = stream;
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                    }
+                    onLoadingChange(false);
+                } catch (err) {
+                    console.error("فشل الوصول للكاميرا:", err);
+                    alert("فشل الوصول للكاميرا. يرجى التأكد من الأذونات.");
+                    setCameraActive(false);
+                    onLoadingChange(false);
+                }
+            };
+            
+            const stopCamera = () => {
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                }
+                setCameraActive(false);
+            };
+            
+            const handleToggleCamera = () => {
+                const newMode = facingMode === 'user' ? 'environment' : 'user';
+                setFacingMode(newMode);
+                startCamera(newMode);
+            };
+            
+            const handleCapture = () => {
+                if (videoRef.current && canvasRef.current) {
+                    onLoadingChange(true);
+                    const video = videoRef.current;
+                    const canvas = canvasRef.current;
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const context = canvas.getContext('2d');
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    stopCamera();
+                    onImageReady(dataUrl);
+                    onLoadingChange(false);
+                }
+            };
+            
+            useEffect(() => {
+                return () => {
+                    if (streamRef.current) {
+                        streamRef.current.getTracks().forEach(track => track.stop());
+                    }
+                };
+            }, []);
+
+            return (
+                <div className="w-full space-y-4">
+                    {!cameraActive ? (
+                        <div className="space-y-4">
+                            <div>
+                                <label htmlFor="file-upload" className="btn-primary w-full flex items-center justify-center cursor-pointer">
+                                    <ArrowUpOnSquareStackIcon />
+                                    <span>اختر ملف من الجهاز</span>
+                                </label>
+                                <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                            </div>
+                            <button onClick={() => startCamera(facingMode)} className="btn-secondary w-full flex items-center justify-center">
+                                <CameraIcon />
+                                <span>استخدام الكاميرا</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <video ref={videoRef} autoPlay playsInline className="w-full rounded-lg bg-black/50 border border-white/30"></video>
+                            <canvas ref={canvasRef} className="hidden"></canvas>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <button onClick={handleCapture} className="btn-primary flex-1">
+                                    التقاط صورة
+                                </button>
+                                <button onClick={handleToggleCamera} className="btn-secondary flex-1">
+                                    تبديل الكاميرا ( {facingMode === 'user' ? 'خلفية' : 'أمامية'} )
+                                </button>
+                                <button onClick={stopCamera} className="btn-danger flex-1">
+                                    إلغاء
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        function ResultDisplay({ image, onSave, onReset, loading, label = "الصورة المولدة" }) {
+            const handleDownload = () => {
+                if (onSave) {
+                    onSave(image, 'generated-image.png');
+                    return;
+                }
+                
+                try {
+                    fetch(image)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = 'generated-image.png';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                        });
+                } catch(e) {
+                    const link = document.createElement('a');
+                    link.href = image;
+                    link.download = 'generated-image.png';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+            
+            const handlePrint = () => {
+                const printImage = document.getElementById('printable-image');
+                if (printImage) {
+                    printImage.src = image;
+                }
+                window.print();
+            };
+            
+            return (
+                <div className="w-full space-y-4">
+                    <h3 className="text-xl font-semibold">{label}</h3>
+                    <div className="relative w-full aspect-square bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/30">
+                        {loading && (
+                            <div className="absolute inset-0 z-10 bg-black/50 flex items-center justify-center">
+                                <Spinner size="lg" />
+                            </div>
+                        )}
+                        {image && <img src={image} alt={label} className="w-full h-full object-contain" />}
+                    </div>
+                    {image && !loading && (
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <button onClick={handleDownload} className="btn-primary flex-1">حفظ الصورة</button>
+                            <button onClick={handlePrint} className="btn-secondary flex-1 noprint">طباعة الصورة</button>
+                            {onReset && <button onClick={onReset} className="btn-danger flex-1">البدء من جديد</button>}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        // --- (Tabs) ---
+        
+        function TextToImageTab() {
+            const { settings } = useSettings();
+            const [prompt, setPrompt] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [resultImage, setResultImage] = useState(null);
+            const [error, setError] = useState(null);
+
+            const handleSubmit = async () => {
+                if (!prompt) {
+                    setError('يرجى كتابة وصف للصورة أولاً.');
+                    return;
+                }
+                if (!settings.apiKey) {
+                    setError('يرجى إدخال مفتاح API في الإعدادات أولاً.');
+                    return;
+                }
+                
+                setLoading(true);
+                setError(null);
+                setResultImage(null);
+                
+                try {
+                    const result = await apiService.generateTextToImage(prompt, settings.textToImageModel, settings.apiKey);
+                    setResultImage(result.imageUrl); 
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message || 'حدث خطأ أثناء توليد الصورة.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-2xl font-bold">توليد صورة من نص</h2>
+                    <p className="text-gray-300">اكتب وصفاً دقيقاً للصورة التي تريد توليدها.</p>
+                    <div className="space-y-4">
+                        <textarea
+                            rows="4"
+                            className="input-field w-full"
+                            placeholder="مثال: قط برتقالي يرتدي قبعة ساحر ويقرأ كتاباً قديماً..."
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            disabled={loading}
+                        />
+                        <button onClick={handleSubmit} className="btn-primary w-full" disabled={loading}>
+                            {loading ? <span className="flex items-center justify-center"><Spinner /> جاري التوليد...</span> : 'توليد الصورة'}
+                        </button>
+                    </div>
+                    
+                    {error && (
+                        <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300">
+                            {error}
+                        </div>
+                    )}
+                    
+                    {(loading || resultImage) && (
+                        <ResultDisplay 
+                            image={resultImage} 
+                            loading={loading}
+                            label="الصورة المولدة"
+                            onReset={() => {
+                                setResultImage(null);
+                                setPrompt('');
+                            }}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        function ImageProcessingTab() {
+            const { settings } = useSettings();
+            
+            const [step, setStep] = useState('upload'); 
+            const [sourceImage, setSourceImage] = useState(null);
+            const [productImage, setProductImage] = useState(null); 
+            const [finalImage, setFinalImage] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [designPrompt, setDesignPrompt] = useState('');
+            
+            const resetAll = () => {
+                setStep('upload');
+                setSourceImage(null);
+                setProductImage(null);
+                setFinalImage(null);
+                setLoading(false);
+                setError(null);
+                setDesignPrompt('');
+            };
+
+            const handleImageReady = (imageBase64) => {
+                setSourceImage(imageBase64);
+                setStep('preview');
+            };
+
+            const handleRemoveBackground = async () => {
+                if (!settings.apiKey) {
+                    setError('يرجى إدخال مفتاح API في الإعدادات أولاً.');
+                    return;
+                }
+                setLoading(true);
+                setError(null);
+                try {
+                    const result = await apiService.removeBackground(sourceImage, settings.bgRemoveModel, settings.apiKey);
+                    setProductImage(result.productImageUrl); 
+                    setStep('final');
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message || 'حدث خطأ أثناء إزالة الخلفية.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const handleGenerateWithPrompt = async () => {
+                 if (!settings.apiKey) {
+                    setError('يرجى إدخال مفتاح API في الإعدادات أولاً.');
+                    return;
+                }
+                if (!designPrompt) {
+                    setError('يرجى كتابة وصف للخلفية الجديدة.');
+                    return;
+                }
+                setLoading(true);
+                setError(null);
+                try {
+                    const result = await apiService.generateImageFromProduct(productImage, designPrompt, settings.designModel, settings.apiKey);
+                    setFinalImage(result.finalImageUrl);
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message || 'حدث خطأ أثناء توليد التصميم.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const handleGenerateAIDesign = async () => {
+                 if (!settings.apiKey) {
+                    setError('يرجى إدخال مفتاح API في الإعدادات أولاً.');
+                    return;
+                }
+                setLoading(true);
+                setError(null);
+                try {
+                    const result = await apiService.generateAIDesign(productImage, settings.designModel, settings.apiKey);
+                    setFinalImage(result.finalImageUrl);
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message || 'حدث خطأ أثناء توليد التصميم.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-2xl font-bold">معالجة وتصميم الصور</h2>
+                    <p className="text-gray-300">ارفع صورة منتج أو التقطها، وسيقوم النظام بإزالة الخلفية، ثم يمكنك وضع المنتج في تصميم جديد كلياً.</p>
+
+                    {error && (
+                        <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300">
+                            {error}
+                        </div>
+                    )}
+                    
+                    {step === 'upload' && (
+                        <ImageUploader onImageReady={handleImageReady} onLoadingChange={setLoading} />
+                    )}
+                    
+                    {step === 'preview' && sourceImage && (
+                        <div className="space-y-4">
+                            <h3 className="text-xl font-semibold">1. الصورة الأصلية</h3>
+                            <img src={sourceImage} alt="Source" className="w-full max-w-lg mx-auto rounded-lg border border-white/30" />
+                            <button onClick={handleRemoveBackground} className="btn-primary w-full" disabled={loading}>
+                                {loading ? <span className="flex items-center justify-center"><Spinner /> جاري إزالة الخلفية...</span> : 'إزالة الخلفية والبدء'}
+                            </button>
+                             <button onClick={resetAll} className="btn-secondary w-full" disabled={loading}>
+                                العودة
+                            </button>
+                        </div>
+                    )}
+                    
+                    {step === 'final' && productImage && !finalImage && (
+                        <div className="space-y-6">
+                            <h3 className="text-xl font-semibold">2. تم عزل المنتج</h3>
+                            <div className="w-full max-w-sm mx-auto bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/30 p-4">
+                                <img src={productImage} alt="Product Only" className="max-w-full h-auto" />
+                            </div>
+                            
+                            <hr className="border-white/20"/>
+                            
+                            <h3 className="text-xl font-semibold">3. اختر طريقة التصميم</h3>
+                            
+                            <div className="glass-card p-4 space-y-4">
+                                <h4 className="font-semibold">الخيار 1: توليد خلفية بناءً على وصفك</h4>
+                                <textarea
+                                    rows="3"
+                                    className="input-field w-full"
+                                    placeholder="مثال: المنتج على طاولة خشبية بجانب نافذة مشمسة"
+                                    value={designPrompt}
+                                    onChange={(e) => setDesignPrompt(e.target.value)}
+                                    disabled={loading}
+                                />
+                                <button onClick={handleGenerateWithPrompt} className="btn-primary w-full" disabled={loading}>
+                                    {loading ? <span className="flex items-center justify-center"><Spinner /> جاري التوليد...</span> : 'توليد بهذا الوصف'}
+                                </button>
+                            </div>
+                            
+                            <div className="glass-card p-4 space-y-4">
+                                <h4 className="font-semibold">الخيار 2: دع الذكاء الاصطناعي يصمم</h4>
+                                <p className="text-sm text-gray-300">سيقوم الذكاء الاصطناعي بتحليل المنتج واقتراح تصميم احترافي مناسب له.</p>
+                                <button onClick={handleGenerateAIDesign} className="btn-secondary w-full" disabled={loading}>
+                                    {loading ? <span className="flex items-center justify-center"><Spinner /> جاري التصميم...</span> : 'تصميم تلقائي بالـ AI'}
+                                </button>
+                            </div>
+                            
+                             <button onClick={resetAll} className="btn-danger w-full mt-4" disabled={loading}>
+                                إلغاء والبدء من جديد
+                            </button>
+                        </div>
+                    )}
+                    
+                    {(loading || finalImage) && (
+                         <ResultDisplay 
+                            image={finalImage} 
+                            loading={loading && step === 'final'}
+                            label="التصميم النهائي"
+                            onReset={resetAll}
+                        />
+                    )}
+                    
+                    {loading && (step === 'upload' || step === 'preview') && (
+                        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
+                            <Spinner size="lg" />
+                        </div>
+                    )}
+                    
+                </div>
+            );
+        }
+
+
+        // --- (App) Main Component ---
+        function App() {
+            const [currentTab, setCurrentTab] = useState('textToImage'); 
+            const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+            const isIncognito = useIncognitoWarning();
+            
+            const TabButton = ({ tabId, children }) => (
+                <button
+                    onClick={() => setCurrentTab(tabId)}
+                    className={`flex-1 px-4 py-3 font-semibold text-center transition-all duration-300 rounded-t-lg ${
+                        currentTab === tabId 
+                        ? 'bg-white/20 text-white border-b-2 border-blue-400' 
+                        : 'text-gray-300 hover:bg-white/10'
+                    }`}
+                >
+                    {children}
+                </button>
+            );
+
+            return (
+                <SettingsProvider>
+                    <div className="min-h-screen p-4 md:p-8 relative">
+                        <IncognitoWarning isIncognito={isIncognito} />
+                        
+                        <header className="noprint absolute top-4 left-4 z-40">
+                            <button 
+                                onClick={() => setIsSettingsOpen(true)} 
+                                className="glass-card p-3 text-white hover:bg-white/30 transition-all rounded-full"
+                                aria-label="الإعدادات"
+                            >
+                                <CogIcon />
+                            </button>
+                        </header>
+                        
+                        <main className="max-w-4xl mx-auto">
+                            <h1 className="text-3xl md:text-4xl font-bold text-center mb-8 text-shadow-lg">
+                                مولد الصور بالذكاء الاصطناعي
+                            </h1>
+                            
+                            <div className="glass-card p-4 md:p-8">
+                                <div className="noprint flex border-b border-white/30 mb-6">
+                                    <TabButton tabId="textToImage">نص إلى صورة</TabButton>
+                                    <TabButton tabId="imageProcessing">معالجة الصور</TabButton>
+                                </div>
+                                
+                                <div className="min-h-[400px]">
+                                    {currentTab === 'textToImage' && <TextToImageTab />}
+                                    {currentTab === 'imageProcessing' && <ImageProcessingTab />}
+                                </div>
+                            </div>
+                        </main>
+                        
+                        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+                    </div>
+                    
+                    {/* حاوية الطباعة */}
+                    <div className="print-only hidden">
+                        <div id="printable-image-container">
+                            <img id="printable-image" src="" alt="Printable" />
+                        </div>
+                    </div>
+                </SettingsProvider>
+            );
+        }
+
+        // --- (Render) ---
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+    </script>
+
+</body>
+</html>
