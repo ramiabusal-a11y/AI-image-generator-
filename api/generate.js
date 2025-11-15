@@ -1,101 +1,130 @@
-// هذا الملف يجب أن يكون باسم: api/generate.js
-// (تحديث: قمنا بتنظيف base64 + تحسين رسائل الخطأ لتظهر في الواجهة)
-
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        res.setHeader('Allow', ['POST']);
-        return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-    }
+  // السماح فقط بطلبات POST
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+  }
 
-    const { apiKey, operation, payload } = req.body;
+  const { apiKey, operation, payload } = req.body;
 
-    if (!apiKey) {
-        return res.status(400).json({ error: 'مفتاح API مفقود.' });
-    }
+  if (!apiKey) {
+    return res.status(400).json({ error: "Missing API Key." });
+  }
 
-    // 1. عملية اختبار الاتصال
-    if (operation === 'test') {
-        try {
-             const testResponse = await fetch('https://api.aimlapi.com/v1/images/generations/', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ model: 'flux/schnell', prompt: 'test' }), 
-             });
+  // تنظيف الـ Base64 ومنع الأخطاء
+  function cleanBase64(str) {
+    if (!str) return null;
 
-            if (!testResponse.ok) {
-                 // --- ( ( ( التعديل هنا ) ) ) ---
-                 // إظهار الخطأ الحقيقي
-                 const errorData = await testResponse.json();
-                 const errorMessage = errorData.error?.message || 'فشل الاتصال - مفتاح غير صالح';
-                 throw new Error(errorMessage);
-                 // --- ( ( ( نهاية التعديل ) ) ) ---
-            }
-            
-            return res.status(200).json({ status: 'ok', message: 'تم الاتصال بنجاح (حقيقي)' });
+    return String(str)
+      .replace(/(\r\n|\n|\r)/gm, "")   // حذف الأسطر الجديدة
+      .replace(/ /g, "")               // حذف الفراغات
+      .replace(/^data:image\/[^;]+;base64,/, "data:image/png;base64,"); // توحيد الصيغة
+  }
 
-        } catch (error) {
-            console.error('Test connection error:', error);
-            return res.status(500).json({ error: error.message });
-        }
-    }
+  const AIML_URL = "https://api.aimlapi.com/v1/images/generations/";
 
-    // 2. عمليات توليد الصور
-    const AIML_API_URL = 'https://api.aimlapi.com/v1/images/generations/';
-
+  // 🔹 اختبار الاتصال
+  if (operation === "test") {
     try {
-        if (payload.image && payload.image.startsWith('data:image/')) {
-            payload.image = payload.image.split(',')[1];
-        }
+      const test = await fetch(AIML_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "flux/schnell",
+          prompt: "test connection"
+        }),
+      });
 
-        const response = await fetch(AIML_API_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload), 
-        });
+      if (!test.ok) {
+        const err = await test.json();
+        throw new Error(err.error?.message || "Invalid API Key");
+      }
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('AIML API Error:', errorData);
-            
-            // --- ( ( ( التعديل هنا ) ) ) ---
-            // إظهار الخطأ الحقيقي للمستخدم
-            // مثال: "Model not found" أو "Invalid prompt"
-            const detailedError = errorData.error?.message || 'فشل الطلب من AIML API';
-            throw new Error(detailedError);
-            // --- ( ( ( نهاية التعديل ) ) ) ---
-        }
-
-        const data = await response.json();
-
-        const imageUrl = data.data?.[0]?.url || data.image_url || data.image; 
-
-        if (!imageUrl) {
-            console.error('Invalid response structure from AIML API:', data);
-            throw new Error('لم يتم العثور على رابط الصورة في الرد.');
-        }
-
-        // إعادة تنسيق الرد
-        if (operation === 'text-to-image') {
-            return res.status(200).json({ imageUrl: imageUrl });
-        }
-        if (operation === 'remove-bg') {
-            return res.status(200).json({ productImageUrl: imageUrl });
-        }
-        if (operation === 'edit-image') {
-            return res.status(200).json({ finalImageUrl: imageUrl });
-        }
-
-        return res.status(400).json({ error: 'عملية غير معروفة' });
-
-    } catch (error) {
-        console.error('Backend error:', error);
-        // إرسال الخطأ الحقيقي للواجهة
-        return res.status(500).json({ error: error.message });
+      return res.status(200).json({
+        status: "ok",
+        message: "Connection successful"
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
     }
+  }
+
+  // 🔹 تجهيز Payload النهائي بناءً على العملية
+  let finalPayload = {};
+
+  if (operation === "text-to-image") {
+    finalPayload = {
+      model: payload.model,
+      prompt: payload.prompt
+    };
+  }
+
+  if (operation === "remove-bg") {
+    finalPayload = {
+      model: payload.model,
+      prompt: "remove background",
+      image: cleanBase64(payload.image)
+    };
+  }
+
+  if (operation === "edit-image") {
+    finalPayload = {
+      model: payload.model,
+      prompt: payload.prompt,
+      image: cleanBase64(payload.image)
+    };
+  }
+
+  // 🔹 إرسال الطلب إلى AIMLAPI
+  try {
+    const response = await fetch(AIML_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(finalPayload),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("AIML Error:", data);
+      return res.status(500).json({
+        error: data.error?.message || "AIML API request failed"
+      });
+    }
+
+    // استخراج رابط الصورة
+    const url =
+      data.data?.[0]?.url ||
+      data.image_url ||
+      data.image ||
+      null;
+
+    if (!url) {
+      return res.status(500).json({ error: "Image URL not found in response." });
+    }
+
+    if (operation === "text-to-image") {
+      return res.status(200).json({ imageUrl: url });
+    }
+
+    if (operation === "remove-bg") {
+      return res.status(200).json({ productImageUrl: url });
+    }
+
+    if (operation === "edit-image") {
+      return res.status(200).json({ finalImageUrl: url });
+    }
+
+    return res.status(400).json({ error: "Unknown operation." });
+
+  } catch (err) {
+    console.error("Backend Error:", err);
+    return res.status(500).json({ error: err.message });
+  }
 }
