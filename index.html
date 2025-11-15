@@ -106,12 +106,6 @@
             </svg>
         );
 
-        const ArrowUturnDownIcon = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 mr-2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-6 6m0 0l-6-6m6 6V9a6 6 0 0112 0v3" />
-            </svg>
-        );
-
         const CameraIcon = () => (
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.174C2.999 7.58 2.25 8.507 2.25 9.574v5.852c0 1.067.75 1.994 1.802 2.169a47.865 47.865 0 001.134.174 2.31 2.31 0 011.64 1.055l.822 1.598m8.22-1.598l.822-1.598a2.31 2.31 0 011.64-1.055 47.865 47.865 0 001.134-.174c1.052-.175 1.802-1.102 1.802-2.169V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.174 2.31 2.31 0 01-1.64-1.055l-.822-1.598m-8.22 1.598c-.414-1.603.465-3.113 2.05-3.113h3.9c1.585 0 2.464 1.51 2.05 3.113l-.822 1.598m-8.22-1.598l-.414-1.603c-.414-1.603.465-3.113 2.05-3.113h3.9c1.585 0 2.464 1.51 2.05 3.113l-.414 1.603" />
@@ -464,12 +458,14 @@
             );
         }
 
-        function ImageUploader({ onImageReady, onLoadingChange }) {
+        // --- ( ( ( تعديل: تم إضافة 'simple' prop ) ) ) ---
+        function ImageUploader({ onImageReady, onLoadingChange, simple = false }) {
             const [cameraActive, setCameraActive] = useState(false);
             const [facingMode, setFacingMode] = useState('environment'); 
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const streamRef = useRef(null);
+            const fileInputRef = useRef(null); // للتحكم في إعادة التعيين
 
             const handleFileChange = (e) => {
                 const file = e.target.files[0];
@@ -481,6 +477,14 @@
                         onLoadingChange(false);
                     };
                     reader.readAsDataURL(file);
+                }
+            };
+            
+            // --- ( ( ( تعديل: دالة لإعادة التعيين ) ) ) ---
+            // تستخدم لإعادة رفع نفس الصورة بعد حذفها
+            const resetFileInput = () => {
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = null;
                 }
             };
 
@@ -542,28 +546,42 @@
             };
             
             useEffect(() => {
+                // إعادة تعيين مدخل الملف عند تبديل 'simple'
+                resetFileInput();
+                
                 return () => {
                     if (streamRef.current) {
                         streamRef.current.getTracks().forEach(track => track.stop());
                     }
                 };
-            }, []);
+            }, [simple]); // إضافة simple كـ dependency
 
             return (
                 <div className="w-full space-y-4">
                     {!cameraActive ? (
                         <div className="space-y-4">
                             <div>
-                                <label htmlFor="file-upload" className="btn-primary w-full flex items-center justify-center cursor-pointer">
+                                <label htmlFor={`file-upload-${simple ? 'simple' : 'full'}`} className="btn-primary w-full flex items-center justify-center cursor-pointer">
                                     <ArrowUpOnSquareStackIcon />
                                     <span>اختر ملف من الجهاز</span>
                                 </label>
-                                <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                                <input 
+                                    id={`file-upload-${simple ? 'simple' : 'full'}`} 
+                                    type="file" 
+                                    accept="image/*" 
+                                    className="hidden" 
+                                    onChange={handleFileChange}
+                                    ref={fileInputRef} // ربط الـ ref
+                                />
                             </div>
-                            <button onClick={() => startCamera(facingMode)} className="btn-secondary w-full flex items-center justify-center">
-                                <CameraIcon />
-                                <span>استخدام الكاميرا</span>
-                            </button>
+                            
+                            {/* --- ( ( ( تعديل: إخفاء الكاميرا في الوضع البسيط ) ) ) --- */}
+                            {!simple && (
+                                <button onClick={() => startCamera(facingMode)} className="btn-secondary w-full flex items-center justify-center">
+                                    <CameraIcon />
+                                    <span>استخدام الكاميرا</span>
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -587,6 +605,7 @@
         }
         
         function ResultDisplay({ image, onSave, onReset, loading, label = "الصورة المولدة" }) {
+            
             const handleDownload = () => {
                 if (onSave) {
                     onSave(image, 'generated-image.png');
@@ -648,12 +667,14 @@
         
         // --- (Tabs) ---
         
+        // --- ( ( ( تعديل: تم تحديث هذا المكون بالكامل ) ) ) ---
         function TextToImageTab() {
             const { settings } = useSettings();
             const [prompt, setPrompt] = useState('');
             const [loading, setLoading] = useState(false);
             const [resultImage, setResultImage] = useState(null);
             const [error, setError] = useState(null);
+            const [attachedImage, setAttachedImage] = useState(null); // (جديد)
 
             const handleSubmit = async () => {
                 if (!prompt) {
@@ -670,8 +691,16 @@
                 setResultImage(null);
                 
                 try {
-                    const result = await apiService.generateTextToImage(prompt, settings.textToImageModel, settings.apiKey);
-                    setResultImage(result.imageUrl); 
+                    let result;
+                    if (attachedImage) {
+                        // (جديد) الاتصال بخدمة التعديل إذا وجدت صورة مرفقة
+                        result = await apiService.generateImageFromProduct(attachedImage, prompt, settings.designModel, settings.apiKey);
+                        setResultImage(result.finalImageUrl); // تتوقع 'finalImageUrl'
+                    } else {
+                        // الاتصال العادي
+                        result = await apiService.generateTextToImage(prompt, settings.textToImageModel, settings.apiKey);
+                        setResultImage(result.imageUrl); // تتوقع 'imageUrl'
+                    }
                 } catch (err) {
                     console.error(err);
                     setError(err.message || 'حدث خطأ أثناء توليد الصورة.');
@@ -684,6 +713,7 @@
                 <div className="space-y-6">
                     <h2 className="text-2xl font-bold">توليد صورة من نص</h2>
                     <p className="text-gray-300">اكتب وصفاً دقيقاً للصورة التي تريد توليدها.</p>
+                    
                     <div className="space-y-4">
                         <textarea
                             rows="4"
@@ -693,10 +723,39 @@
                             onChange={(e) => setPrompt(e.target.value)}
                             disabled={loading}
                         />
-                        <button onClick={handleSubmit} className="btn-primary w-full" disabled={loading}>
-                            {loading ? <span className="flex items-center justify-center"><Spinner /> جاري التوليد...</span> : 'توليد الصورة'}
-                        </button>
                     </div>
+
+                    {/* --- ( ( ( قسم جديد: إرفاق صورة ) ) ) --- */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">إرفاق صورة (اختياري)</h3>
+                        <p className="text-sm text-gray-300">
+                            أرفق صورة لاستخدامها كمرجع مع الوصف (سيتطلب مودل تعديل الصور).
+                        </p>
+                        
+                        {!attachedImage ? (
+                            <ImageUploader 
+                                onImageReady={(img) => setAttachedImage(img)} 
+                                onLoadingChange={setLoading} 
+                                simple={true} // استخدام الوضع البسيط (ملف فقط)
+                            />
+                        ) : (
+                            <div className="relative w-32 h-32">
+                                <img src={attachedImage} alt="Attached" className="w-full h-full object-contain rounded-lg border border-white/30" />
+                                <button 
+                                    onClick={() => setAttachedImage(null)} 
+                                    className="absolute -top-2 -right-2 p-1 bg-red-600 rounded-full text-white shadow-lg"
+                                    aria-label="إزالة الصورة المرفقة"
+                                >
+                                    <XMarkIcon />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {/* --- ( ( ( نهاية القسم الجديد ) ) ) --- */}
+                    
+                    <button onClick={handleSubmit} className="btn-primary w-full" disabled={loading}>
+                        {loading ? <span className="flex items-center justify-center"><Spinner /> جاري التوليد...</span> : 'توليد الصورة'}
+                    </button>
                     
                     {error && (
                         <div className="p-3 rounded-lg text-center font-medium bg-red-500/20 text-red-300 break-words">
@@ -712,6 +771,7 @@
                             onReset={() => {
                                 setResultImage(null);
                                 setPrompt('');
+                                setAttachedImage(null); // (جديد)
                             }}
                         />
                     )}
@@ -719,6 +779,7 @@
             );
         }
 
+        // --- ( ( ( تعديل: تم تحديث هذا المكون ) ) ) ---
         function ImageProcessingTab() {
             const { settings } = useSettings();
             
@@ -804,6 +865,32 @@
                 }
             };
 
+            // --- ( ( ( دالة مساعدة جديدة للحفظ ) ) ) ---
+            const handleDownloadImage = (url, filename) => {
+                try {
+                    fetch(url)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const link = document.createElement('a');
+                            const objectUrl = window.URL.createObjectURL(blob);
+                            link.href = objectUrl;
+                            link.download = filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(objectUrl);
+                        });
+                } catch(e) {
+                    // كحل بديل للـ data URLs أو الأخطاء
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
             return (
                 <div className="space-y-6">
                     <h2 className="text-2xl font-bold">معالجة وتصميم الصور</h2>
@@ -838,6 +925,16 @@
                             <div className="w-full max-w-sm mx-auto bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/30 p-4">
                                 <img src={productImage} alt="Product Only" className="max-w-full h-auto" />
                             </div>
+                            
+                            {/* --- ( ( ( الزر الجديد للحفظ ) ) ) --- */}
+                            <button 
+                                onClick={() => handleDownloadImage(productImage, 'product-no-bg.png')} 
+                                className="btn-secondary w-full"
+                            >
+                                حفظ المنتج (بدون خلفية)
+                            </button>
+                            {/* --- ( ( ( نهاية الزر الجديد ) ) ) --- */}
+
                             
                             <hr className="border-white/20"/>
                             
