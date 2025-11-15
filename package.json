@@ -4,6 +4,6 @@
   "description": "Backend proxy for AIMLAPI.COM on Vercel",
   "author": "Gemini",
   "engines": {
-    "node": "18.x"
+    "node": "20.x"
   }
 }
