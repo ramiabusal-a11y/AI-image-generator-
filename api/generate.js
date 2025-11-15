@@ -10,20 +10,14 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing API Key." });
   }
 
-  // نفس endpoint القديم للتوليد / إزالة الخلفية
   const AIML_GENERATE_URL = "https://api.aimlapi.com/v1/images/generations/";
-  // endpoint جديد للتحرير
   const AIML_EDIT_URL = "https://api.aimlapi.com/v1/images/edits";
 
-  // تنظيف الـ base64 من الأسطر والمسافات
   function cleanBase64(str) {
     if (!str) return null;
-    return String(str)
-      .replace(/(\r\n|\n|\r)/gm, "")
-      .replace(/ /g, "");
+    return String(str).replace(/(\r\n|\n|\r)/gm, "").replace(/ /g, "");
   }
 
-  // استخراج الـ mime والبيانات من data URL
   function parseDataUrl(dataUrl) {
     if (!dataUrl) return { mime: "image/png", data: null };
 
@@ -31,13 +25,10 @@ export default async function handler(req, res) {
     if (match) {
       return { mime: match[1], data: match[2] };
     }
-    // لو جاءنا Base64 بدون data:... نعامله كـ PNG
     return { mime: "image/png", data: dataUrl };
   }
 
-  // ================================
-  //  (1) اختبار الاتصال
-  // ================================
+  // (1) اختبار الاتصال
   if (operation === "test") {
     try {
       const test = await fetch(AIML_GENERATE_URL, {
@@ -57,25 +48,22 @@ export default async function handler(req, res) {
         throw new Error(err.error?.message || "Invalid API Key");
       }
 
-      return res
-        .status(200)
-        .json({ status: "ok", message: "Connection successful" });
+      return res.status(200).json({
+        status: "ok",
+        message: "Connection successful",
+      });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
   }
 
-  // ================================
-  //  (2) عملية خاصة بالتحرير edit-image
-  //     (هنا نريد استخدام صورة المنتج فعلياً)
-  // ================================
+  // (2) تصميم المنتج في مشهد (Edit Image)
   if (operation === "edit-image") {
     try {
       if (!payload || !payload.image) {
         return res.status(400).json({ error: "Missing product image." });
       }
 
-      // نحول data URL إلى bytes
       const cleaned = cleanBase64(payload.image);
       const { mime, data } = parseDataUrl(cleaned);
 
@@ -87,14 +75,13 @@ export default async function handler(req, res) {
       const blob = new Blob([buffer], { type: mime || "image/png" });
 
       const formData = new FormData();
-      // نُجبِر الموديل على gpt-image-1 حتى لو المستخدم كتب شيئاً آخر في الإعدادات
-      formData.append("model", "openai/gpt-image-1");
+      formData.append("model", "alibaba/qwen-image-edit"); // ✔ مدعوم فعليًا للتحرير
       formData.append(
         "prompt",
         payload.prompt ||
-          "Place this product in a clean, professional marketing scene."
+          "Place this product in a clean professional marketing scene"
       );
-      // اسم افتراضي للملف
+
       const ext = (mime && mime.split("/")[1]) || "png";
       formData.append("image", blob, `product.${ext}`);
 
@@ -102,7 +89,6 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          // لا نضع Content-Type هنا، fetch يضبطه تلقائياً مع boundary
         },
         body: formData,
       });
@@ -113,7 +99,8 @@ export default async function handler(req, res) {
         console.error("AIML Edit Error:", dataResp);
         return res.status(500).json({
           error:
-            dataResp.error?.message || "AIML API edit request failed (step 3).",
+            dataResp.error?.message ||
+            "AIML API edit request failed (step 3).",
         });
       }
 
@@ -136,24 +123,19 @@ export default async function handler(req, res) {
     }
   }
 
-  // ================================
-  //  (3) باقي العمليات (Text-to-Image + Remove BG)
-  //      عبر /images/generations كما كانت
-  // ================================
+  // (3) Text-to-Image & Remove BG
   let finalPayload = {};
 
-  // --- Text → Image ---
   if (operation === "text-to-image") {
     finalPayload = {
-      model: payload.model, // flux/schnell من الإعدادات
+      model: payload.model,
       prompt: payload.prompt,
     };
   }
 
-  // --- Remove Background (Qwen يعمل هنا) ---
   if (operation === "remove-bg") {
     finalPayload = {
-      model: payload.model, // alibaba/qwen-image-edit من الإعدادات
+      model: payload.model, // alibaba/qwen-image-edit
       prompt: "remove background",
       image: cleanBase64(payload.image),
     };
